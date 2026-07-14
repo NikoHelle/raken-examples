@@ -1,0 +1,25 @@
+{
+  "name": "@rakenjs/examples",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Renderer-agnostic example apps for the Raken family. Each example is a @rakenjs/app schema (state/events/derived/views) exported under its own subpath (e.g. @rakenjs/examples/todo); renderer playgrounds import the app-def and supply their own ui-views. Code-only — no renderer or UI imports.",
+  "license": "MIT",
+  "author": "Niko Helle",
+  "type": "module",
+  "exports": {
+    "./todo": {
+      "types": "./dist/todo/index.d.ts",
+      "import": "./dist/todo/index.js"
+    }
+  },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "check:all": "npm run typecheck",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@rakenjs/app": ">=0.0.1 <1.0.0"
+  }
+}
