@@ -189,6 +189,66 @@ describe('kanbanApp — filter/search', () => {
   });
 });
 
+describe('kanbanApp — detail-drawer selection', () => {
+  it('select-card sets selectedCard to the full card for the given id', () => {
+    const t = app();
+    expect(t.derived<Card | null>('selectedCard')).toBeNull();
+
+    t.dispatch('select-card', 'card-3');
+    expect(t.derived<Card | null>('selectedCard')?.id).toBe('card-3');
+    expect(t.derived<Card | null>('selectedCard')?.title).toBe('Board drag-and-drop');
+    t.dispose();
+  });
+
+  it('clear-selection nulls selectedCard', () => {
+    const t = app();
+    t.dispatch('select-card', 'card-3');
+    expect(t.derived<Card | null>('selectedCard')).not.toBeNull();
+
+    t.dispatch('clear-selection');
+    expect(t.derived<Card | null>('selectedCard')).toBeNull();
+    t.dispose();
+  });
+
+  it('selecting a different card overwrites the previous selection', () => {
+    const t = app();
+    t.dispatch('select-card', 'card-1');
+    expect(t.derived<Card | null>('selectedCard')?.id).toBe('card-1');
+
+    t.dispatch('select-card', 'card-2');
+    expect(t.derived<Card | null>('selectedCard')?.id).toBe('card-2');
+    t.dispose();
+  });
+
+  it('boardViewModel forwards selectedCard, defaulting to null', () => {
+    const t = app();
+    const vmClosed = boardViewModel(byGroup(t) as Record<string, readonly Card[]>, counts(t), exiting(t));
+    expect(vmClosed.selectedCard).toBeNull();
+
+    t.dispatch('select-card', 'card-5');
+    const vmOpen = boardViewModel(
+      byGroup(t) as Record<string, readonly Card[]>,
+      counts(t),
+      exiting(t),
+      '',
+      t.derived<Card | null>('selectedCard')
+    );
+    expect(vmOpen.selectedCard?.id).toBe('card-5');
+    t.dispose();
+  });
+
+  it('a deleted (dropExited) selected card resolves selectedCard back to null', () => {
+    const t = app();
+    t.dispatch('select-card', 'card-1');
+    expect(t.derived<Card | null>('selectedCard')).not.toBeNull();
+
+    t.dispatch('cards:remove', 'card-1');
+    t.dispatch('cards:dropExited', 'card-1');
+    expect(t.derived<Card | null>('selectedCard')).toBeNull();
+    t.dispose();
+  });
+});
+
 describe('kanbanApp — Board view-model shape', () => {
   it('boardViewModel produces one ColumnVM per fixed column, cards annotated with exiting', () => {
     const t = app();

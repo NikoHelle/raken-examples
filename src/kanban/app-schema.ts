@@ -2,8 +2,9 @@
  * Kanban app schema — `@rakenjs/app` state/derived/views for the shared Kanban example (spec Unit
  * D), authored with the fluent `createApp(node, name)` builder over the `board<Card>` recipe.
  * Renderer-agnostic: nothing here imports `@rakenjs/ui` or any renderer; a renderer's `ui-views`
- * binds the `Board` view. Scope so far: board + card CRUD + move + filter/search (no detail-drawer —
- * next increment per the spec).
+ * binds the `Board` view. Scope: board + card CRUD + move + filter/search + a detail-drawer selection
+ * (the final increment per the spec — labels/priority display + the drawer itself are the
+ * playground's job; this schema only tracks WHICH card is selected).
  *
  * `.tools([...board({ name: 'cards', … }), namespacedStateTool(...)])` supplies the real
  * state/events/derived tools; `kanbanMap` (kanban-maps.ts) only mirrors their names so `.view(...)`
@@ -11,9 +12,9 @@
  * `docs/AI-README.md` §"Typing a `.view` against a recipe's output"). No `.state(...)` call here: the
  * board recipe's own `stateTool` already seeds `{ items, exiting }` from `initial`.
  *
- * Filter/search's `query` lives in a SEPARATE `ui` namespaced-state tool (not the board's `stateTool`
- * — a node allows only one regular `stateTool`) — see the `UI_NAMESPACE` doc comment below for the
- * full mechanism + why it was chosen over `composeRecipes`.
+ * Filter/search's `query` AND the drawer's `selectedId` both live in the SAME `ui` namespaced-state
+ * tool (not the board's `stateTool` — a node allows only one regular `stateTool`) — see the
+ * `UI_NAMESPACE` doc comment below for the full mechanism + why it was chosen over `composeRecipes`.
  */
 import { createApp, actionShape, board, boardActions, namespacedStateTool, derivedTool, processorTool } from '@rakenjs/app';
 import { kanbanMap, boardViewModel, COLUMNS, INITIAL_CARDS } from './kanban-maps';
@@ -41,12 +42,13 @@ function asString(value: unknown): string | undefined {
 }
 
 /**
- * Filter/search state's home: a `ui` namespace (`namespacedStateTool`), NOT the board recipe's
- * `stateTool` — a node allows only one regular `stateTool`, and that one is already the `board`
- * recipe's `{ items, exiting }` (named `cards`). `{ board: { query: '' } }` leaves room for the
- * detail-drawer increment to add a sibling namespace entry (e.g. `selectedId`) without touching this
- * one. See `kanban-maps.ts`'s `UiState` doc comment for the full mechanism writeup + why a plain
- * `derivedTool`/`.view` `reads` CAN read it declaratively via `ns.board.query`.
+ * Filter/search + detail-drawer state's home: a `ui` namespace (`namespacedStateTool`), NOT the board
+ * recipe's `stateTool` — a node allows only one regular `stateTool`, and that one is already the
+ * `board` recipe's `{ items, exiting }` (named `cards`). `{ board: { query: '', selectedId: null } }`
+ * — `selectedId` is a sibling field in the SAME `board` namespace entry as `query` (both are
+ * board-scoped ui state), not a second namespace. See `kanban-maps.ts`'s `UiState` doc comment for the
+ * full mechanism writeup + why a plain `derivedTool`/`.view` `reads` CAN read it declaratively via
+ * `ns.board.query`/`ns.board.selectedId`.
  */
 const UI_NAMESPACE = 'ui';
 
@@ -70,7 +72,7 @@ export function kanbanApp() {
   return createApp(kanbanMap, 'Kanban', { action: actionShape<KanbanAction>() })
     .tools([
       ...board<Card>({ name: BOARD_NAME, groups: COLUMNS, initial: INITIAL_CARDS }),
-      namespacedStateTool({ name: UI_NAMESPACE, states: { board: { query: '' } } }),
+      namespacedStateTool({ name: UI_NAMESPACE, states: { board: { query: '', selectedId: null } } }),
     ])
     .tool(
       derivedTool({
@@ -80,24 +82,52 @@ export function kanbanApp() {
       })
     )
     .tool(
+      // The full selected `Card` (or `null`) the drawer renders — resolves `ns.board.selectedId`
+      // against the board recipe's own `state.items` map. Reads BOTH `state.items` (so the derived
+      // recomputes when the selected card itself is edited/removed, not just on selection change) and
+      // `ns.board.selectedId` — same two-input-path shape `query` uses for its one input, extended to
+      // two. A `selectedId` that no longer exists in `items` (e.g. the selected card was deleted)
+      // resolves to `null` — the drawer closes itself rather than showing a stale/missing card.
+      derivedTool({
+        name: 'selectedCard',
+        inputs: ['state.items', 'ns.board.selectedId'],
+        compute: (i) => {
+          const { items, selectedId } = i as { items?: Record<string, Card>; selectedId?: string | null };
+          if (!selectedId) return null;
+          return items?.[selectedId] ?? null;
+        },
+      })
+    )
+    .tool(
       processorTool({
         name: BOARD_PROCESSOR_NAME,
         // Filter/search: sets the ui-namespaced query the Board view-model derives `matches` from.
         // `ctx.ns('board')` — 'board' is the NAMESPACE key (this tool's `states: { board: {...} }`),
         // not the namespacedStateTool's own `name` ('ui', used only for multi-instance disambiguation).
-        handles: { 'set-query': (ctx, payload) => ctx.ns('board')?.update({ query: payload as string }) },
+        handles: {
+          'set-query': (ctx, payload) => ctx.ns('board')?.update({ query: payload as string }),
+          // Detail-drawer: select/clear which card's id the `selectedCard` derived resolves.
+          'select-card': (ctx, payload) => ctx.ns('board')?.update({ selectedId: payload as string }),
+          'clear-selection': (ctx) => ctx.ns('board')?.update({ selectedId: null }),
+        },
       })
     )
     .view('Board', {
-      // Reads `derived.query` (the `derivedTool` above, itself reading `ns.board.query`) rather than
-      // the namespaced path directly: `NodePath<M>`'s typed checker has no `ns.*` member yet, and
-      // mixing an `asPath(...)` escape-hatch entry into a `reads` array breaks `InputsObjectM`'s
-      // last-segment key inference for ALL entries (a real friction point found while wiring this up
-      // — `LastSegment<DynamicPath>` doesn't reduce to a literal key). Routing through a named
-      // `derivedTool` keeps every `reads` entry a checked literal path.
-      reads: ['derived.cardsByGroup', 'derived.cardsCounts', 'derived.cardsExiting', 'derived.query'],
-      map: ({ cardsByGroup, cardsCounts, cardsExiting, query }) =>
-        boardViewModel(cardsByGroup, cardsCounts, cardsExiting, query),
+      // Reads `derived.query`/`derived.selectedCard` (both `derivedTool`s above, themselves reading
+      // `ns.board.*`) rather than the namespaced path directly: `NodePath<M>`'s typed checker has no
+      // `ns.*` member yet, and mixing an `asPath(...)` escape-hatch entry into a `reads` array breaks
+      // `InputsObjectM`'s last-segment key inference for ALL entries (a real friction point found while
+      // wiring this up — `LastSegment<DynamicPath>` doesn't reduce to a literal key). Routing through a
+      // named `derivedTool` keeps every `reads` entry a checked literal path.
+      reads: [
+        'derived.cardsByGroup',
+        'derived.cardsCounts',
+        'derived.cardsExiting',
+        'derived.query',
+        'derived.selectedCard',
+      ],
+      map: ({ cardsByGroup, cardsCounts, cardsExiting, query, selectedCard }) =>
+        boardViewModel(cardsByGroup, cardsCounts, cardsExiting, query, selectedCard),
       events: {
         // Filter/search ui-action: the search input's live value. `@rakenjs/ui/actions`' `onInput`
         // carries a plain input's value as `identifier` (never `payload`) — same convention the
@@ -107,6 +137,16 @@ export function kanbanApp() {
           const query = asString(action.identifier) ?? '';
           return { type: 'set-query', payload: query };
         },
+        // Detail-drawer: a card body click carries the card's id as `identifier` (see the playground's
+        // `card-click` behavior — a click on the card MINUS its delete button, which stops
+        // propagation). Selecting the same card again (or a different one) simply overwrites
+        // `selectedId`; there's no toggle-to-close-on-repeat-click in this MVP.
+        'card-click': (action) => {
+          const id = asString(action.identifier);
+          return id === undefined ? undefined : { type: 'select-card', payload: id };
+        },
+        // Detail-drawer: the close button or Escape closes the drawer.
+        'drawer-close': () => ({ type: 'clear-selection' }),
         // Add a new card to a column: identifier carries the target column id, payload the title.
         'add-card': (action) => {
           const group = asString(action.identifier);

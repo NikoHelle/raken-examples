@@ -52,10 +52,12 @@ export type ColumnVM = {
   readonly cards: readonly CardVM[];
 };
 
-/** The `Board` view's props — everything a renderer needs to paint the four columns. */
+/** The `Board` view's props — everything a renderer needs to paint the four columns + the detail drawer. */
 export type BoardVM = {
   readonly columns: readonly ColumnVM[];
   readonly query: string;
+  /** The full selected card, or `null` when none is selected (drawer closed) — see `UiState.selectedId`. */
+  readonly selectedCard: Card | null;
 };
 
 /** Human-facing column titles, index-aligned with {@link COLUMNS}. */
@@ -81,21 +83,27 @@ type CardsEvents = {
   'cards:remove': string;
   'cards:dropExited': string;
   'set-query': string;
+  // Detail-drawer increment: select/clear the card the drawer shows (see the `ui` namespaced-state
+  // block below for why these aren't `cards:*` board events).
+  'select-card': string;
+  'clear-selection': undefined;
 };
 
 /**
  * State shape of the `ui` namespace (a `namespacedStateTool`, added in app-schema.ts) — a SEPARATE
  * state slot from the `board` recipe's singleton `stateTool` (`{ items, exiting }`, named `cards`). A
- * node allows only one regular `stateTool`, so demo-local UI state (the filter query now; a
- * `selectedId` for the detail-drawer increment next) lives in its own `ui` namespace instead, read
- * declaratively via the `ns.<namespace>.<field>` dotted path (NOT `state.ui.board.query` — the
- * resolver's `state.` prefix always targets the singleton state tool; `ns.` is the separate namespaced
- * path — see `@rakenjs/app`'s `tools/derived/index.ts` `resolvePathValue`). Confirmed by a throwaway
+ * node allows only one regular `stateTool`, so demo-local UI state (the filter `query`, and now the
+ * detail-drawer's `selectedId`) lives in its own `ui` namespace instead, read declaratively via the
+ * `ns.<namespace>.<field>` dotted path (NOT `state.ui.board.query` — the resolver's `state.` prefix
+ * always targets the singleton state tool; `ns.` is the separate namespaced path — see
+ * `@rakenjs/app`'s `tools/derived/index.ts` `resolvePathValue`). Confirmed by a throwaway
  * `createTestApp` spike (deleted) that both a `derivedTool` (`inputs`) and a `.view` (`reads`) can
- * read `ns.board.query` while the `cards` stateTool keeps working untouched.
+ * read `ns.board.query` while the `cards` stateTool keeps working untouched. `selectedId` follows the
+ * exact same mechanism, in the same `board` namespace entry (a sibling field, not a second namespace —
+ * both `query` and `selectedId` are board-scoped ui state).
  */
 export type UiState = {
-  readonly board: { readonly query: string };
+  readonly board: { readonly query: string; readonly selectedId: string | null };
 };
 
 /**
@@ -132,6 +140,9 @@ export const kanbanMap = defineNode({
     // namespaced-state tool) — a type-contract entry only, same convention as the board recipe's own
     // deriveds above.
     query: '' as string,
+    // Mirrors the `selectedCard` derivedTool added in app-schema.ts (reads `ns.board.selectedId` off
+    // the `ui` namespaced-state tool, resolved against `state.items`) — a type-contract entry only.
+    selectedCard: null as Card | null,
   },
   events: events<CardsEvents>(),
   views: {
@@ -147,16 +158,19 @@ export function cardMatchesQuery(title: string, query: string): boolean {
 
 /**
  * Builds this demo's `Board` view-model from the board recipe's three deriveds plus the `ui` namespace's
- * `query`: one {@link ColumnVM} per fixed column (in `COLUMNS` order), each card annotated with an
- * `exiting` flag (cross-referenced from `cardsExiting`) and a `matches` flag (title vs. `query`, case-
- * insensitive; empty query → every card matches). `query` defaults to `''` so callers/tests that don't
- * thread it through (pre-filter-increment call sites) keep seeing `matches: true` everywhere.
+ * `query`/`selectedCard`: one {@link ColumnVM} per fixed column (in `COLUMNS` order), each card
+ * annotated with an `exiting` flag (cross-referenced from `cardsExiting`) and a `matches` flag (title
+ * vs. `query`, case-insensitive; empty query → every card matches). `query` defaults to `''` and
+ * `selectedCard` defaults to `null` so callers/tests that don't thread them through (pre-filter/
+ * pre-drawer-increment call sites) keep seeing the pre-increment behavior (`matches: true` everywhere;
+ * drawer closed).
  */
 export function boardViewModel(
   byGroup: Record<string, readonly Card[]>,
   counts: Record<string, number>,
   exiting: readonly string[],
-  query = ''
+  query = '',
+  selectedCard: Card | null = null
 ): BoardVM {
   const exitingSet = new Set(exiting);
   const columns: ColumnVM[] = COLUMNS.map((id) => ({
@@ -169,5 +183,5 @@ export function boardViewModel(
       matches: cardMatchesQuery(card.title, query),
     })),
   }));
-  return { columns, query };
+  return { columns, query, selectedCard };
 }
