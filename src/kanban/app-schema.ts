@@ -2,16 +2,20 @@
  * Kanban app schema — `@rakenjs/app` state/derived/views for the shared Kanban example (spec Unit
  * D), authored with the fluent `createApp(node, name)` builder over the `board<Card>` recipe.
  * Renderer-agnostic: nothing here imports `@rakenjs/ui` or any renderer; a renderer's `ui-views`
- * binds the `Board` view. MVP scope: board + card CRUD + move (no filter, no detail-drawer — later
- * increments per the spec).
+ * binds the `Board` view. Scope so far: board + card CRUD + move + filter/search (no detail-drawer —
+ * next increment per the spec).
  *
- * `.tools(board({ name: 'cards', … }))` supplies the real state/events/derived tools; `kanbanMap`
- * (kanban-maps.ts) only mirrors their names so `.view(...)` type-checks against them (recipes add
- * tools outside the node map — see `@rakenjs/app`'s `docs/AI-README.md` §"Typing a `.view` against a
- * recipe's output"). No `.state(...)` call here: the board recipe's own `stateTool` already seeds
- * `{ items, exiting }` from `initial`.
+ * `.tools([...board({ name: 'cards', … }), namespacedStateTool(...)])` supplies the real
+ * state/events/derived tools; `kanbanMap` (kanban-maps.ts) only mirrors their names so `.view(...)`
+ * type-checks against them (recipes add tools outside the node map — see `@rakenjs/app`'s
+ * `docs/AI-README.md` §"Typing a `.view` against a recipe's output"). No `.state(...)` call here: the
+ * board recipe's own `stateTool` already seeds `{ items, exiting }` from `initial`.
+ *
+ * Filter/search's `query` lives in a SEPARATE `ui` namespaced-state tool (not the board's `stateTool`
+ * — a node allows only one regular `stateTool`) — see the `UI_NAMESPACE` doc comment below for the
+ * full mechanism + why it was chosen over `composeRecipes`.
  */
-import { createApp, actionShape, board, boardActions } from '@rakenjs/app';
+import { createApp, actionShape, board, boardActions, namespacedStateTool, derivedTool, processorTool } from '@rakenjs/app';
 import { kanbanMap, boardViewModel, COLUMNS, INITIAL_CARDS } from './kanban-maps';
 import type { Card, KanbanAction } from './kanban-maps';
 
@@ -36,14 +40,73 @@ function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/**
+ * Filter/search state's home: a `ui` namespace (`namespacedStateTool`), NOT the board recipe's
+ * `stateTool` — a node allows only one regular `stateTool`, and that one is already the `board`
+ * recipe's `{ items, exiting }` (named `cards`). `{ board: { query: '' } }` leaves room for the
+ * detail-drawer increment to add a sibling namespace entry (e.g. `selectedId`) without touching this
+ * one. See `kanban-maps.ts`'s `UiState` doc comment for the full mechanism writeup + why a plain
+ * `derivedTool`/`.view` `reads` CAN read it declaratively via `ns.board.query`.
+ */
+const UI_NAMESPACE = 'ui';
+
+/**
+ * The board recipe's own processor tool name (`${BOARD_NAME}Processor` — see `@rakenjs/app`'s
+ * `board.ts`). A node also allows only one EVENT tool total (a harder ceiling than the state-tool
+ * one — `instantiate.ts` throws unconditionally past one, since `eventTool` has no `append`/merge
+ * unlike `processorTool`/`namespacedStateTool`), so `.on(...)`'s sugar (which creates a SECOND event
+ * tool) can't be used here — the board recipe's `cardsEvents` tool is already the node's one event
+ * tool. `set-query` is dispatched (and handled below) without its own declared `emits` entry; the
+ * schema-validator's `unhandled-event`/`unknown-trigger` checks for that are warn-severity only (see
+ * `@rakenjs/app`'s validate.ts), so this is a tolerated, documented gap — matching the codebase's own
+ * standard (`createTestApp`'s `assertValid` defaults to `false`). The processor handler is appended to
+ * the board's EXISTING processor tool by matching its name exactly, so `pipe()`'s same-name merge
+ * (processorTool supports `append`) folds it in instead of erroring on a second processor.
+ */
+const BOARD_PROCESSOR_NAME = `${BOARD_NAME}Processor`;
+
 /** Root app schema: `Kanban`. */
 export function kanbanApp() {
   return createApp(kanbanMap, 'Kanban', { action: actionShape<KanbanAction>() })
-    .tools(board<Card>({ name: BOARD_NAME, groups: COLUMNS, initial: INITIAL_CARDS }))
+    .tools([
+      ...board<Card>({ name: BOARD_NAME, groups: COLUMNS, initial: INITIAL_CARDS }),
+      namespacedStateTool({ name: UI_NAMESPACE, states: { board: { query: '' } } }),
+    ])
+    .tool(
+      derivedTool({
+        name: 'query',
+        inputs: ['ns.board.query'],
+        compute: (i) => (i as { query?: string }).query ?? '',
+      })
+    )
+    .tool(
+      processorTool({
+        name: BOARD_PROCESSOR_NAME,
+        // Filter/search: sets the ui-namespaced query the Board view-model derives `matches` from.
+        // `ctx.ns('board')` — 'board' is the NAMESPACE key (this tool's `states: { board: {...} }`),
+        // not the namespacedStateTool's own `name` ('ui', used only for multi-instance disambiguation).
+        handles: { 'set-query': (ctx, payload) => ctx.ns('board')?.update({ query: payload as string }) },
+      })
+    )
     .view('Board', {
-      reads: ['derived.cardsByGroup', 'derived.cardsCounts', 'derived.cardsExiting'],
-      map: ({ cardsByGroup, cardsCounts, cardsExiting }) => boardViewModel(cardsByGroup, cardsCounts, cardsExiting),
+      // Reads `derived.query` (the `derivedTool` above, itself reading `ns.board.query`) rather than
+      // the namespaced path directly: `NodePath<M>`'s typed checker has no `ns.*` member yet, and
+      // mixing an `asPath(...)` escape-hatch entry into a `reads` array breaks `InputsObjectM`'s
+      // last-segment key inference for ALL entries (a real friction point found while wiring this up
+      // — `LastSegment<DynamicPath>` doesn't reduce to a literal key). Routing through a named
+      // `derivedTool` keeps every `reads` entry a checked literal path.
+      reads: ['derived.cardsByGroup', 'derived.cardsCounts', 'derived.cardsExiting', 'derived.query'],
+      map: ({ cardsByGroup, cardsCounts, cardsExiting, query }) =>
+        boardViewModel(cardsByGroup, cardsCounts, cardsExiting, query),
       events: {
+        // Filter/search ui-action: the search input's live value. `@rakenjs/ui/actions`' `onInput`
+        // carries a plain input's value as `identifier` (never `payload`) — same convention the
+        // `todo` app-def's `draft-input` handler reads (`action.identifier`), so no new local action
+        // factory is needed here (unlike `add-card`'s form submit, which genuinely needs a payload).
+        'filter-change': (action) => {
+          const query = asString(action.identifier) ?? '';
+          return { type: 'set-query', payload: query };
+        },
         // Add a new card to a column: identifier carries the target column id, payload the title.
         'add-card': (action) => {
           const group = asString(action.identifier);

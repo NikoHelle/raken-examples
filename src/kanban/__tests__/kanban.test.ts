@@ -119,6 +119,76 @@ describe('kanbanApp — remove / exit lifecycle', () => {
   });
 });
 
+describe('kanbanApp — filter/search', () => {
+  it('empty query: every card matches', () => {
+    const t = app();
+    const vm = boardViewModel(byGroup(t) as Record<string, readonly Card[]>, counts(t), exiting(t), '');
+    for (const col of vm.columns) {
+      for (const card of col.cards) {
+        expect(card.matches).toBe(true);
+      }
+    }
+    t.dispose();
+  });
+
+  it('a query narrows matches: non-matching cards get matches:false, matching stay true', () => {
+    const t = app();
+    // INITIAL_CARDS has "Design empty states" (todo) among others — filter down to it.
+    const vm = boardViewModel(byGroup(t) as Record<string, readonly Card[]>, counts(t), exiting(t), 'design');
+    const todo = vm.columns.find((c) => c.id === 'todo')!;
+    expect(todo.cards.find((c) => c.id === 'card-1')?.matches).toBe(true); // "Design empty states"
+    expect(todo.cards.find((c) => c.id === 'card-2')?.matches).toBe(false); // "Write onboarding copy"
+    t.dispose();
+  });
+
+  it('matching is case-insensitive', () => {
+    const t = app();
+    const vm = boardViewModel(byGroup(t) as Record<string, readonly Card[]>, counts(t), exiting(t), 'DESIGN');
+    const todo = vm.columns.find((c) => c.id === 'todo')!;
+    expect(todo.cards.find((c) => c.id === 'card-1')?.matches).toBe(true);
+    t.dispose();
+  });
+
+  it('dispatching set-query updates the derived query the Board view reads (ns.board.query mechanism)', () => {
+    const t = app();
+    expect(t.derived<string>('query')).toBe('');
+
+    t.dispatch('set-query', 'onboarding');
+    expect(t.derived<string>('query')).toBe('onboarding');
+
+    const vm = boardViewModel(
+      byGroup(t) as Record<string, readonly Card[]>,
+      counts(t),
+      exiting(t),
+      t.derived<string>('query')
+    );
+    const todo = vm.columns.find((c) => c.id === 'todo')!;
+    expect(todo.cards.find((c) => c.id === 'card-1')?.matches).toBe(false); // "Design empty states"
+    expect(todo.cards.find((c) => c.id === 'card-2')?.matches).toBe(true); // "Write onboarding copy"
+    t.dispose();
+  });
+
+  it('clearing the query (set-query "") restores matches:true for every card', () => {
+    const t = app();
+    t.dispatch('set-query', 'design');
+    t.dispatch('set-query', '');
+    expect(t.derived<string>('query')).toBe('');
+
+    const vm = boardViewModel(
+      byGroup(t) as Record<string, readonly Card[]>,
+      counts(t),
+      exiting(t),
+      t.derived<string>('query')
+    );
+    for (const col of vm.columns) {
+      for (const card of col.cards) {
+        expect(card.matches).toBe(true);
+      }
+    }
+    t.dispose();
+  });
+});
+
 describe('kanbanApp — Board view-model shape', () => {
   it('boardViewModel produces one ColumnVM per fixed column, cards annotated with exiting', () => {
     const t = app();
