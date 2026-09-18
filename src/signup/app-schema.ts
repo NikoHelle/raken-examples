@@ -3,8 +3,8 @@
  * binds the `SignupShell` view. One node, a `step` pointer, a pure validator, per-step gating.
  */
 import { createApp, actionShape } from '@rakenjs/app';
-import { signupMap, validateSignup, stepIsValid, STEP_FIELDS, STEPS, INITIAL_VALUES } from './signup-maps';
-import type { SignupField, SignupTouched, SignupAction } from './signup-maps';
+import { signupMap, validateSignup, stepIsValid, STEP_FIELDS, STEPS, INITIAL_VALUES } from './signup-maps.js';
+import type { SignupField, SignupTouched, SignupAction } from './signup-maps.js';
 
 function markTouched(touched: SignupTouched, fields: readonly SignupField[]): SignupTouched {
   const next: SignupTouched = { ...touched };

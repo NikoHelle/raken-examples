@@ -6,8 +6,8 @@
  * card CRUD + move — no filter, no detail-drawer (later increments). Nothing here imports a renderer
  * or `@rakenjs/ui`.
  */
-export { kanbanApp, BOARD_NAME, cardsActions } from './app-schema';
-export { COLUMNS, COLUMN_TITLES, INITIAL_CARDS, kanbanMap, boardViewModel } from './kanban-maps';
+export { kanbanApp, BOARD_NAME, cardsActions } from './app-schema.js';
+export { COLUMNS, COLUMN_TITLES, INITIAL_CARDS, kanbanMap, boardViewModel } from './kanban-maps.js';
 export type {
   Card,
   ColumnId,
@@ -17,4 +17,4 @@ export type {
   BoardVM,
   CardsState,
   KanbanAction,
-} from './kanban-maps';
+} from './kanban-maps.js';
