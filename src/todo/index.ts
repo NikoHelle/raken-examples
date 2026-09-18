@@ -5,6 +5,6 @@
  * each renderer playground imports `todoApp` and supplies its own `ui-views` (plain `@rakenjs/ui`,
  * Tailwind, …). Nothing here imports a renderer or `@rakenjs/ui`.
  */
-export { todoApp } from './app-schema';
-export { todoMap, todoListMap, visibleItemsFor, countsFor, isTodoFilter } from './todo-maps';
-export type { TodoItem, TodoFilter, TodoState, TodoCounts, TodoAction } from './todo-maps';
+export { todoApp } from './app-schema.js';
+export { todoMap, todoListMap, visibleItemsFor, countsFor, isTodoFilter } from './todo-maps.js';
+export type { TodoItem, TodoFilter, TodoState, TodoCounts, TodoAction } from './todo-maps.js';

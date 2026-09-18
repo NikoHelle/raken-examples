@@ -17,11 +17,11 @@
  * `UI_NAMESPACE` doc comment below for the full mechanism + why it was chosen over `composeRecipes`.
  */
 import { createApp, actionShape, board, boardActions, namespacedStateTool, derivedTool, processorTool } from '@rakenjs/app';
-import { kanbanMap, boardViewModel, COLUMNS, INITIAL_CARDS } from './kanban-maps';
-import type { Card, KanbanAction } from './kanban-maps';
+import { kanbanMap, boardViewModel, COLUMNS, INITIAL_CARDS } from './kanban-maps.js';
+import type { Card, KanbanAction } from './kanban-maps.js';
 
-export type { Card, ColumnId, Priority, CardVM, ColumnVM, BoardVM, CardsState, KanbanAction } from './kanban-maps';
-export { COLUMNS, COLUMN_TITLES, INITIAL_CARDS, kanbanMap, boardViewModel } from './kanban-maps';
+export type { Card, ColumnId, Priority, CardVM, ColumnVM, BoardVM, CardsState, KanbanAction } from './kanban-maps.js';
+export { COLUMNS, COLUMN_TITLES, INITIAL_CARDS, kanbanMap, boardViewModel } from './kanban-maps.js';
 
 /** Board name used for the `board<Card>` recipe — event types are `cards:add`, `cards:move`, etc. */
 export const BOARD_NAME = 'cards';

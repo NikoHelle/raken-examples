@@ -10,10 +10,10 @@
  * `.forward(...)` is the child→root bubbling shim.
  */
 import { createApp, actionShape } from '@rakenjs/app';
-import { todoMap, todoListMap, visibleItemsFor, countsFor, isTodoFilter } from './todo-maps';
-import type { TodoAction } from './todo-maps';
+import { todoMap, todoListMap, visibleItemsFor, countsFor, isTodoFilter } from './todo-maps.js';
+import type { TodoAction } from './todo-maps.js';
 
-export type { TodoItem, TodoFilter, TodoState, TodoCounts, TodoAction } from './todo-maps';
+export type { TodoItem, TodoFilter, TodoState, TodoCounts, TodoAction } from './todo-maps.js';
 
 let nextId = 0;
 /** Monotonic id generator — swapped for a real id source (uuid, server) outside a demo. */
