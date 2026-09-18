@@ -30,3 +30,9 @@ mountApp(container, todoApp(), { views: { TodoShell: MyShell, TodoList: MyList }
 Part of the Raken polyrepo (see the meta-workspace's `repos.json`). Currently **not published to
 npm** — consumed by the sibling renderer playgrounds via the workspace link; the public repo is here
 for reading and cloning.
+
+## Publishing checks
+
+`npm run smoke:pack` packs this package and the sibling `@rakenjs/app`, installs both tarballs into a
+throwaway project and imports every published subpath under native Node ESM (runs in `prepublishOnly`;
+set `RAKEN_APP_DIR` if the app checkout is not at `../app`).
