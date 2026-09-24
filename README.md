@@ -12,6 +12,7 @@ Each example is exported under its own subpath, so the collection grows without 
 | --- | --- | --- |
 | Todo | `@rakenjs/examples/todo` | Root + child node, derived values, event bubbling (`forward`), a controlled input. |
 | Signup | `@rakenjs/examples/signup` | Multi-step form (a `step` pointer), pure `validate(values)=>errors`, per-step gating, touched/error display, submit. |
+| Kanban | `@rakenjs/examples/kanban` | A `board()` recipe composed via `createApp(...).tools(...)`: columns, card CRUD + move between columns, a derived board view-model. |
 
 ```ts
 import { todoApp } from '@rakenjs/examples/todo';
