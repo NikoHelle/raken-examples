@@ -237,6 +237,26 @@ describe('kanbanApp — detail-drawer selection', () => {
     t.dispose();
   });
 
+  it('removing the selected card closes the drawer at once (selectedId cleared, not left stale)', () => {
+    const t = app();
+    t.dispatch('select-card', 'card-1');
+    t.dispatch('cards:remove', 'card-1'); // soft delete: card-1 stays in items while it animates out
+    expect(t.derived<Card | null>('selectedCard')).toBeNull();
+
+    // a later re-add of the same id must not resurrect the old selection
+    t.dispatch('cards:add', { id: 'card-1', group: 'todo', order: 0, title: 'again', labels: [], priority: 'low' });
+    expect(t.derived<Card | null>('selectedCard')).toBeNull();
+    t.dispose();
+  });
+
+  it('removing a different card keeps the selection', () => {
+    const t = app();
+    t.dispatch('select-card', 'card-1');
+    t.dispatch('cards:remove', 'card-2');
+    expect(t.derived<Card | null>('selectedCard')?.id).toBe('card-1');
+    t.dispose();
+  });
+
   it('a deleted (dropExited) selected card resolves selectedCard back to null', () => {
     const t = app();
     t.dispatch('select-card', 'card-1');

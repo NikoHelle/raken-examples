@@ -3,7 +3,7 @@
  * binds the `SignupShell` view. One node, a `step` pointer, a pure validator, per-step gating.
  */
 import { createApp, actionShape } from '@rakenjs/app';
-import { signupMap, validateSignup, stepIsValid, STEP_FIELDS, STEPS, INITIAL_VALUES } from './signup-maps.js';
+import { signupMap, validateSignup, stepIsValid, isPlan, STEP_FIELDS, STEPS, INITIAL_VALUES } from './signup-maps.js';
 import type { SignupField, SignupTouched, SignupAction } from './signup-maps.js';
 
 function markTouched(touched: SignupTouched, fields: readonly SignupField[]): SignupTouched {
@@ -18,6 +18,13 @@ function fieldEvent(field: SignupField) {
     typeof action.identifier === 'string'
       ? ({ type: 'set-field', payload: { field, value: action.identifier } } as const)
       : undefined;
+}
+
+/** `plan-change`: only a known {@link Plan} becomes a `set-field`; anything else is dropped. */
+function planEvent(action: SignupAction) {
+  return isPlan(action.identifier)
+    ? ({ type: 'set-field', payload: { field: 'plan', value: action.identifier } } as const)
+    : undefined;
 }
 
 /** Root app schema: `Signup`. */
@@ -44,12 +51,12 @@ export function signupApp() {
           return { ...s, touched, step: Math.min(s.step + 1, STEPS.length - 1) };
         }),
       back: ({ state }) => state?.update((s) => ({ ...s, step: Math.max(s.step - 1, 0) })),
-      // Submit: reveal all errors; only finish when the whole form validates.
+      // Submit: reveal all errors; only finish on the last step and when the whole form validates.
       submit: ({ state }) =>
         state?.update((s) => {
           const errors = validateSignup(s.values);
           const touched = markTouched(s.touched, Object.keys(s.values) as SignupField[]);
-          if (Object.keys(errors).length > 0) return { ...s, touched, errors };
+          if (s.step !== STEPS.length - 1 || Object.keys(errors).length > 0) return { ...s, touched, errors };
           return { ...s, touched, errors, status: 'done' };
         }),
       reset: ({ state }) =>
@@ -94,7 +101,7 @@ export function signupApp() {
         'password-input': fieldEvent('password'),
         'confirm-input': fieldEvent('confirm'),
         'name-input': fieldEvent('name'),
-        'plan-change': fieldEvent('plan'),
+        'plan-change': planEvent,
         'next-click': () => ({ type: 'next' }),
         'back-click': () => ({ type: 'back' }),
         'submit-click': () => ({ type: 'submit' }),

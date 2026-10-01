@@ -1,17 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { createTestApp } from '@rakenjs/app';
+import { createTestApp, renderApp, createJsonRenderHook } from '@rakenjs/app';
 
 import { signupApp } from '../app-schema';
 import { validateSignup, stepIsValid, INITIAL_VALUES } from '../signup-maps';
-import type { SignupState } from '../signup-maps';
+import type { SignupState, SignupValues } from '../signup-maps';
 
-const VALID = { email: 'ada@example.com', password: 'password1', confirm: 'password1', name: 'Ada', plan: 'free' };
+const VALID: SignupValues = { email: 'ada@example.com', password: 'password1', confirm: 'password1', name: 'Ada', plan: 'free' };
 
 describe('validateSignup (pure)', () => {
   it('flags empty/invalid fields; a fully valid form has no errors', () => {
     // email/password/name empty are errors; confirm ('') matches password ('') so it is not.
     expect(Object.keys(validateSignup(INITIAL_VALUES)).sort()).toEqual(['email', 'name', 'password']);
     expect(validateSignup(VALID)).toEqual({});
+  });
+
+  it('rejects a plan that is not a Plan', () => {
+    expect(validateSignup({ ...VALID, plan: 'enterprise' } as unknown as SignupValues).plan).toBeDefined();
+    expect(validateSignup({ ...VALID, plan: 'pro' })).toEqual({});
   });
 
   it('catches a mismatched confirmation', () => {
@@ -74,6 +79,28 @@ describe('signupApp — behavior', () => {
     app.dispatch('back');
     expect(app.field<number>('step')).toBe(0);
     expect(app.state<SignupState>()?.values.email).toBe(VALID.email);
+    app.dispose();
+  });
+
+  it('submit cannot complete before the last step, even with every field valid', () => {
+    const app = createTestApp(signupApp());
+    for (const field of ['email', 'password', 'confirm', 'name'] as const) {
+      app.dispatch('set-field', { field, value: VALID[field] });
+    }
+    expect(app.field<number>('step')).toBe(0);
+    app.dispatch('submit');
+    expect(app.field<string>('status')).toBe('editing');
+    app.dispose();
+  });
+
+  it('an invalid plan-change is ignored; a valid one is stored', () => {
+    const app = createTestApp(signupApp());
+    const handle = renderApp(app.root, createJsonRenderHook().hook);
+    handle.dispatch('Signup', 'plan-change', { type: 'plan-change', identifier: 'enterprise' });
+    expect(app.state<SignupState>()?.values.plan).toBe('free');
+    handle.dispatch('Signup', 'plan-change', { type: 'plan-change', identifier: 'pro' });
+    expect(app.state<SignupState>()?.values.plan).toBe('pro');
+    handle.dispose();
     app.dispose();
   });
 });
