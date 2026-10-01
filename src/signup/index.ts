@@ -5,7 +5,7 @@
  * playground imports `signupApp` and supplies its own `ui-views`. Nothing here imports a renderer.
  */
 export { signupApp } from './app-schema.js';
-export { signupMap, validateSignup, stepIsValid, STEPS, STEP_FIELDS, INITIAL_VALUES } from './signup-maps.js';
+export { signupMap, validateSignup, stepIsValid, isPlan, PLANS, STEPS, STEP_FIELDS, INITIAL_VALUES } from './signup-maps.js';
 export type {
   Plan,
   SignupValues,

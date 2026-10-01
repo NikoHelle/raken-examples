@@ -115,6 +115,21 @@ export function kanbanApp() {
         },
       })
     )
+    .tool(
+      // Removing the selected card closes the drawer now: `cards:remove` is a soft delete (the card
+      // stays in `items` while it animates out), and a stale `selectedId` would reopen on a re-add.
+      // A SEPARATELY named processor — the board's own already handles `cards:remove`, and a same-name
+      // merge rejects overlapping keys; distinct processors each subscribe, so both handlers run.
+      processorTool({
+        name: 'selectionProcessor',
+        handles: {
+          'cards:remove': (ctx, payload) => {
+            const ui = ctx.ns('board');
+            if (ui && ui.getField('selectedId') === payload) ui.update({ selectedId: null });
+          },
+        },
+      })
+    )
     .view('Board', {
       // Reads `derived.query`/`derived.selectedCard` (both `derivedTool`s above, themselves reading
       // `ns.board.*`) rather than the namespaced path directly: `NodePath<M>`'s typed checker has no

@@ -10,12 +10,20 @@ import { defineNode, events } from '@rakenjs/app';
 import type { AppActionShape } from '@rakenjs/app';
 
 export type Plan = 'free' | 'pro';
+
+/** The selectable plans, in display order. */
+export const PLANS: readonly Plan[] = ['free', 'pro'];
+
+/** Runtime narrow for a {@link Plan} (e.g. a select's raw string value). */
+export function isPlan(value: unknown): value is Plan {
+  return PLANS.some((p) => p === value);
+}
 export type SignupValues = {
   readonly email: string;
   readonly password: string;
   readonly confirm: string;
   readonly name: string;
-  readonly plan: string;
+  readonly plan: Plan;
 };
 export type SignupField = keyof SignupValues;
 export type SignupErrors = Partial<Record<SignupField, string>>;
@@ -34,7 +42,7 @@ export type SignupState = {
 export const STEPS = ['Account', 'Profile', 'Review'] as const;
 
 /** The fields each step gates on (Review has none of its own). Index-aligned with {@link STEPS}. */
-export const STEP_FIELDS: readonly (readonly SignupField[])[] = [['email', 'password', 'confirm'], ['name'], []];
+export const STEP_FIELDS: readonly (readonly SignupField[])[] = [['email', 'password', 'confirm'], ['name', 'plan'], []];
 
 export const INITIAL_VALUES: SignupValues = { email: '', password: '', confirm: '', name: '', plan: 'free' };
 
@@ -48,6 +56,7 @@ export function validateSignup(v: SignupValues): SignupErrors {
   if (v.password.length < 8) e.password = 'Use at least 8 characters.';
   if (v.confirm !== v.password) e.confirm = 'Passwords must match.';
   if (v.name.trim() === '') e.name = 'Your name is required.';
+  if (!isPlan(v.plan)) e.plan = 'Choose a plan.';
   return e;
 }
 
