@@ -19,6 +19,7 @@
 import { createApp, actionShape, board, boardActions, namespacedStateTool, derivedTool, processorTool } from '@rakenjs/app';
 import { kanbanMap, boardViewModel, COLUMNS, INITIAL_CARDS } from './kanban-maps.js';
 import type { Card, KanbanAction } from './kanban-maps.js';
+import { nextId } from '../next-id.js';
 
 export type { Card, ColumnId, Priority, CardVM, ColumnVM, BoardVM, CardsState, KanbanAction } from './kanban-maps.js';
 export { COLUMNS, COLUMN_TITLES, INITIAL_CARDS, kanbanMap, boardViewModel } from './kanban-maps.js';
@@ -28,13 +29,6 @@ export const BOARD_NAME = 'cards';
 
 /** Re-exported action builders for the `cards` board — convenient for tests/playgrounds. */
 export const cardsActions = boardActions<Card>(BOARD_NAME);
-
-let nextId = 0;
-/** Monotonic id generator — swapped for a real id source (uuid, server) outside a demo. */
-function createId(): string {
-  nextId += 1;
-  return `card-new-${nextId}`;
-}
 
 /** Reads a ui action's `identifier` as a plain string, else `undefined` (a runtime narrow, not a cast). */
 function asString(value: unknown): string | undefined {
@@ -109,6 +103,15 @@ export function kanbanApp() {
           // Detail-drawer: select/clear which card's id the `selectedCard` derived resolves.
           'select-card': (ctx, payload) => ctx.ns('board')?.update({ selectedId: payload as string }),
           'clear-selection': (ctx) => ctx.ns('board')?.update({ selectedId: null }),
+          // New card: mints the id from the board's own `items` (not a module counter — that restarts
+          // after a snapshot restore into a fresh module and would overwrite a card), then adds it.
+          'create-card': (ctx, payload) => {
+            const { group, title } = payload as { group: string; title: string };
+            const items = ctx.state?.getField('items') as Record<string, Card> | undefined;
+            const id = nextId('card-new-', Object.keys(items ?? {}));
+            const card: Card = { id, group, order: 0, title, labels: [], priority: 'med' };
+            ctx.events.dispatch({ type: 'cards:add', payload: card });
+          },
         },
       })
     )
@@ -152,8 +155,7 @@ export function kanbanApp() {
           const group = asString(action.identifier);
           const title = typeof action.payload === 'string' ? action.payload : '';
           if (group === undefined) return undefined;
-          const card: Card = { id: createId(), group, order: 0, title, labels: [], priority: 'med' };
-          return { type: 'cards:add', payload: card };
+          return { type: 'create-card', payload: { group, title } };
         },
         // A drop (drag or keyboard) resolved to a target column + index by the renderer's dnd bridge.
         'card-dropped': (action) => {

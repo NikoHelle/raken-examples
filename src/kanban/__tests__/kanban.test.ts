@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { createTestApp } from '@rakenjs/app';
+import { describe, it, expect, vi } from 'vitest';
+import { createTestApp, renderApp, createJsonRenderHook } from '@rakenjs/app';
 
 import { kanbanApp } from '../app-schema';
 import { COLUMNS, INITIAL_CARDS, boardViewModel } from '../kanban-maps';
@@ -272,5 +272,38 @@ describe('kanbanApp — Board view-model shape', () => {
     expect(state?.items['card-1']).toBeTruthy();
     expect(state?.exiting).toEqual([]);
     t.dispose();
+  });
+});
+
+describe('kanbanApp — new-card ids', () => {
+  /** A fresh `app-schema` module instance — what a page reload sees before restoring a snapshot. */
+  async function freshKanban() {
+    vi.resetModules();
+    const mod = await import('../app-schema');
+    return createTestApp(mod.kanbanApp());
+  }
+
+  /** Fires the Board view's `add-card` ui action (routed through its `mapEvents`, which mints the id). */
+  function addCard(t: ReturnType<typeof app>, title: string) {
+    const handle = renderApp(t.root, createJsonRenderHook().hook);
+    handle.dispatch('Kanban', 'add-card', { type: 'add-card', identifier: 'todo', payload: title });
+    handle.dispose();
+  }
+
+  it('add-card after a snapshot restore into a fresh module does not overwrite an existing card', async () => {
+    const before = await freshKanban();
+    addCard(before, 'First');
+    expect(Object.keys(items(before)).length).toBe(INITIAL_CARDS.length + 1);
+    const snap = before.snapshot();
+    before.dispose();
+
+    const after = await freshKanban();
+    after.restore(snap);
+    addCard(after, 'Second');
+    const titles = Object.values(items(after)).map((c) => c.title);
+    expect(titles).toContain('First');
+    expect(titles).toContain('Second');
+    expect(Object.keys(items(after)).length).toBe(INITIAL_CARDS.length + 2);
+    after.dispose();
   });
 });

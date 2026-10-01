@@ -12,15 +12,9 @@
 import { createApp, actionShape } from '@rakenjs/app';
 import { todoMap, todoListMap, visibleItemsFor, countsFor, isTodoFilter } from './todo-maps.js';
 import type { TodoAction } from './todo-maps.js';
+import { nextId } from '../next-id.js';
 
 export type { TodoItem, TodoFilter, TodoState, TodoCounts, TodoAction } from './todo-maps.js';
-
-let nextId = 0;
-/** Monotonic id generator — swapped for a real id source (uuid, server) outside a demo. */
-function createId(): string {
-  nextId += 1;
-  return `todo-${nextId}`;
-}
 
 /** Root app schema: `Todo` (with its `list` child). */
 export function todoApp() {
@@ -32,7 +26,7 @@ export function todoApp() {
         state?.update((s) => {
           const text = s.draft.trim();
           if (text === '') return s;
-          const item = { id: createId(), text, done: false };
+          const item = { id: nextId('todo-', s.items.map((i) => i.id)), text, done: false };
           return { ...s, items: [...s.items, item], draft: '' };
         }),
       toggle: ({ state }, id) =>
