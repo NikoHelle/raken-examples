@@ -112,6 +112,12 @@ export function kanbanApp() {
             const card: Card = { id, group, order: 0, title, labels: [], priority: 'med' };
             ctx.events.dispatch({ type: 'cards:add', payload: card });
           },
+          // Exit finished: hard-delete ONLY a card that is actually leaving. `transitionend` bubbles and
+          // also fires for hover/drag-lift transitions, so a stray `card-exited` must not delete a card.
+          'finish-card-exit': (ctx, payload) => {
+            const leaving = ctx.state?.getField('exiting') as readonly string[] | undefined;
+            if (leaving?.includes(payload as string)) ctx.events.dispatch({ type: 'cards:dropExited', payload });
+          },
         },
       })
     )
@@ -186,11 +192,14 @@ export function kanbanApp() {
           if (!reorder || typeof reorder.id !== 'string' || typeof reorder.index !== 'number') return undefined;
           return { type: 'cards:reorder', payload: { id: reorder.id, index: reorder.index } };
         },
-        // Edit a card's fields (title/labels/priority) — identifier is the card id, payload the patch.
+        // Edit a card's content fields (title/labels/priority) — identifier is the card id, payload the
+        // patch. `group`/`order` are dropped: a raw write bypasses `move`'s reindexing (duplicate/gapped
+        // orders), so position changes go through `card-dropped`/`card-reordered` only.
         'update-card': (action) => {
           const id = asString(action.identifier);
-          const patch = action.payload as Partial<Omit<Card, 'id'>> | undefined;
-          if (id === undefined || !patch) return undefined;
+          const raw = action.payload as Partial<Omit<Card, 'id'>> | undefined;
+          if (id === undefined || !raw) return undefined;
+          const { group: _group, order: _order, ...patch } = raw;
           return { type: 'cards:update', payload: { id, patch } };
         },
         // Soft-delete: marks the card exiting so the renderer can play its exit animation.
@@ -198,10 +207,11 @@ export function kanbanApp() {
           const id = asString(action.identifier);
           return id === undefined ? undefined : { type: 'cards:remove', payload: id };
         },
-        // Finalize a prior remove once the exit animation's `transitionend` fires.
+        // Finalize a prior remove once the exit animation's `transitionend` fires — via
+        // `finish-card-exit`, which ignores ids that aren't exiting.
         'card-exited': (action) => {
           const id = asString(action.identifier);
-          return id === undefined ? undefined : { type: 'cards:dropExited', payload: id };
+          return id === undefined ? undefined : { type: 'finish-card-exit', payload: id };
         },
       },
     })

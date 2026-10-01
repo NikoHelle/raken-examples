@@ -327,3 +327,37 @@ describe('kanbanApp — new-card ids', () => {
     after.dispose();
   });
 });
+
+describe('kanbanApp — view-event guards', () => {
+  /** Fires one Board view ui action through its `mapEvents`, the way a renderer does. */
+  function fire(t: ReturnType<typeof app>, type: string, identifier: string, payload?: unknown) {
+    const handle = renderApp(t.root, createJsonRenderHook().hook);
+    handle.dispatch('Kanban', type, { type, identifier, payload });
+    handle.dispose();
+  }
+
+  it('card-exited for a card that is not leaving does not delete it (a stray transitionend)', () => {
+    const t = app();
+    fire(t, 'card-exited', 'card-1');
+    expect(items(t)['card-1']).toBeTruthy();
+    t.dispose();
+  });
+
+  it('card-exited for a leaving card finalizes the delete', () => {
+    const t = app();
+    fire(t, 'remove-card', 'card-1');
+    fire(t, 'card-exited', 'card-1');
+    expect(items(t)['card-1']).toBeUndefined();
+    expect(exiting(t)).toEqual([]);
+    t.dispose();
+  });
+
+  it('update-card edits content only: group/order in the patch are ignored (moves go through move)', () => {
+    const t = app();
+    fire(t, 'update-card', 'card-1', { title: 'Renamed', group: 'doing', order: 0 });
+    expect(items(t)['card-1']?.title).toBe('Renamed');
+    expect(column(t, 'todo').map((c) => c.id)).toEqual(['card-1', 'card-2']);
+    expect(column(t, 'doing').map((c) => c.order)).toEqual([0]);
+    t.dispose();
+  });
+});

@@ -85,6 +85,8 @@ type CardsEvents = {
   'set-query': string;
   // `add-card` maps here; the handler mints the card id from state, then dispatches `cards:add`.
   'create-card': { group: string; title: string };
+  // `card-exited` maps here; the handler drops the card only if it is actually exiting.
+  'finish-card-exit': string;
   // Detail-drawer increment: select/clear the card the drawer shows (see the `ui` namespaced-state
   // block below for why these aren't `cards:*` board events).
   'select-card': string;
